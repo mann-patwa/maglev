@@ -36,7 +36,7 @@ type Manager struct {
 	realTimeVehicleLookupByVehicle map[string]int
 	staticUpdateMutex              sync.Mutex   // Protects against concurrent ForceUpdate calls
 	staticMutex                    sync.RWMutex // Protects gtfsData and lastUpdated
-	config                         Config
+	Config                         Config
 	shutdownChan                   chan struct{}
 	wg                             sync.WaitGroup
 	shutdownOnce                   sync.Once
@@ -57,7 +57,7 @@ func InitGTFSManager(config Config) (*Manager, error) {
 
 	manager := &Manager{
 		isLocalFile:                    isLocalFile,
-		config:                         config,
+		Config:                         config,
 		shutdownChan:                   make(chan struct{}),
 		realTimeTripLookup:             make(map[string]int),
 		realTimeVehicleLookupByTrip:    make(map[string]int),
@@ -429,7 +429,7 @@ func (manager *Manager) GetAllTripUpdates() []gtfs.Trip {
 
 // IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (manager *Manager) PrintStatistics() {
-	fmt.Printf("Source: %s (Local File: %v)\n", manager.config.GtfsURL, manager.isLocalFile)
+	fmt.Printf("Source: %s (Local File: %v)\n", manager.Config.GtfsURL, manager.isLocalFile)
 	fmt.Printf("Last Updated: %s\n", manager.lastUpdated)
 	fmt.Println("Stops Count: ", len(manager.gtfsData.Stops))
 	fmt.Println("Routes Count: ", len(manager.gtfsData.Routes))

@@ -85,7 +85,7 @@ func TestHotSwap_QueriesCompleteDuringSwap(t *testing.T) {
 	}
 
 	newSource := models.GetFixturePath(t, "gtfs.zip")
-	manager.config.GtfsURL = newSource
+	manager.Config.GtfsURL = newSource
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -128,7 +128,7 @@ func TestHotSwap_FailureRecovery(t *testing.T) {
 	assert.Equal(t, 1, len(agencies))
 	assert.Equal(t, "25", agencies[0].ID)
 
-	manager.config.GtfsURL = "/path/to/non/existent/file.zip"
+	manager.Config.GtfsURL = "/path/to/non/existent/file.zip"
 
 	err = manager.ForceUpdate(context.Background())
 
@@ -172,7 +172,7 @@ func TestHotSwap_OldDatabaseCleanup(t *testing.T) {
 	}
 	defer manager.Shutdown()
 
-	manager.config.GtfsURL = gtfsNew
+	manager.Config.GtfsURL = gtfsNew
 	err = manager.ForceUpdate(context.Background())
 	require.NoError(t, err, "ForceUpdate failed for new GTFS")
 
@@ -228,7 +228,7 @@ func TestHotSwap_MutexProtectedSwap(t *testing.T) {
 	oldBlockLayoverIndices := manager.blockLayoverIndices
 	manager.RUnlock()
 
-	manager.config.GtfsURL = gtfsNew
+	manager.Config.GtfsURL = gtfsNew
 	err = manager.ForceUpdate(context.Background())
 	assert.Nil(t, err, "ForceUpdate should succeed")
 
@@ -273,7 +273,7 @@ func TestHotSwap_ConcurrentForceUpdate(t *testing.T) {
 
 	// Prepare to update to "gtfs.zip"
 	newSource := models.GetFixturePath(t, "gtfs.zip")
-	manager.config.GtfsURL = newSource
+	manager.Config.GtfsURL = newSource
 
 	// Launch concurrent ForceUpdate calls
 	concurrency := 2
