@@ -241,6 +241,10 @@ func (api *RestAPI) arrivalsAndDeparturesForStopHandler(w http.ResponseWriter, r
 	}
 
 	for _, st := range stopTimes {
+		if ctx.Err() != nil {
+			return
+		}
+
 		route, routeExists := routesLookup[st.RouteID]
 		if !routeExists {
 			api.Logger.Debug("skipping stop time: route not found in batch fetch",
@@ -435,6 +439,10 @@ func (api *RestAPI) arrivalsAndDeparturesForStopHandler(w http.ResponseWriter, r
 	calc := GTFS.NewAdvancedDirectionCalculator(api.GtfsManager.GtfsDB.Queries)
 
 	for stopID := range stopIDSet {
+		if ctx.Err() != nil {
+			return
+		}
+
 		stopData, err := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, stopID)
 		if err != nil {
 			api.Logger.Debug("skipping stop reference: stop not found",
