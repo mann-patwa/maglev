@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/OneBusAway/go-gtfs"
+	go_gtfs "github.com/OneBusAway/go-gtfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"maglev.onebusaway.org/internal/models"
@@ -528,7 +529,7 @@ func TestGetPredictedTimes_NoRealTimeData(t *testing.T) {
 	scheduledDeparture := scheduledArrival.Add(2 * time.Minute)
 
 	// When there's no real-time data, should return 0, 0
-	predArrival, predDeparture := api.getPredictedTimes("nonexistent_trip", "nonexistent_stop", scheduledArrival, scheduledDeparture)
+	predArrival, predDeparture := api.getPredictedTimes("nonexistent_trip", "nonexistent_stop", 1, scheduledArrival, scheduledDeparture)
 
 	assert.Equal(t, int64(0), predArrival)
 	assert.Equal(t, int64(0), predDeparture)
@@ -543,7 +544,7 @@ func TestGetPredictedTimes_EqualArrivalDeparture(t *testing.T) {
 
 	// Even without real-time data, test the logic path
 	// This tests that the function handles the case correctly
-	predArrival, predDeparture := api.getPredictedTimes("test_trip", "test_stop", scheduledTime, scheduledTime)
+	predArrival, predDeparture := api.getPredictedTimes("test_trip", "test_stop", 1, scheduledTime, scheduledTime)
 
 	// Without real-time data, returns 0,0
 	assert.Equal(t, int64(0), predArrival)
@@ -664,4 +665,37 @@ func TestArrivalsAndDeparturesForStopHandlerInvalidTime(t *testing.T) {
 	resp, _ := serveApiAndRetrieveEndpoint(t, api, endpoint)
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestGetPredictedTimes_DelayPropagationLogic(t *testing.T) {
+	api := createTestApi(t)
+
+	tripID := "test_trip"
+	targetStopSequence := int64(5)
+
+	delayDuration := 120 * time.Second
+
+	uint32Ptr := func(v uint32) *uint32 { return &v }
+
+	mockTrip := go_gtfs.Trip{
+		ID: go_gtfs.TripID{ID: tripID},
+		StopTimeUpdates: []go_gtfs.StopTimeUpdate{
+			{
+				StopSequence: uint32Ptr(1),
+				Departure: &go_gtfs.StopTimeEvent{
+					Delay: &delayDuration,
+				},
+			},
+		},
+	}
+
+	api.GtfsManager.SetRealTimeTripsForTest([]go_gtfs.Trip{mockTrip})
+
+	scheduledTime := time.Now()
+	predArrival, predDeparture := api.getPredictedTimes(tripID, "test_stop", targetStopSequence, scheduledTime, scheduledTime)
+
+	expectedTime := scheduledTime.Add(delayDuration).UnixMilli()
+
+	assert.Equal(t, expectedTime, predArrival, "Arrival time should include 120s delay")
+	assert.Equal(t, expectedTime, predDeparture, "Departure time should include 120s delay")
 }

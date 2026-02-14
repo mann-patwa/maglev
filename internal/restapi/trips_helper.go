@@ -410,54 +410,93 @@ func findNextStopByTime(currentTimeSeconds int64, stopTimes []*gtfsdb.StopTime) 
 }
 
 func getDistanceAlongShape(lat, lon float64, shape []gtfs.ShapePoint) float64 {
-	if len(shape) == 0 {
-		return 0
-	}
-	var total float64
-	var closestIndex int
-	var minDist = math.MaxFloat64
-
-	for i := range shape {
-		dist := utils.Distance(lat, lon, shape[i].Latitude, shape[i].Longitude)
-		if dist < minDist {
-			minDist = dist
-			closestIndex = i
-		}
-	}
-
-	for i := 1; i <= closestIndex; i++ {
-		total += utils.Distance(shape[i-1].Latitude, shape[i-1].Longitude, shape[i].Latitude, shape[i].Longitude)
-	}
-
-	return total
-}
-
-func getDistanceAlongShapeInRange(lat, lon float64, shape []gtfs.ShapePoint, minDistTraveled, maxDistTraveled float64) float64 {
-	if len(shape) == 0 {
+	if len(shape) < 2 {
 		return 0
 	}
 
 	cumulativeDistances := preCalculateCumulativeDistances(shape)
-	var bestDist float64
-	var minPointDist = math.MaxFloat64
 
-	// If maxDistTraveled is 0, it might mean it wasn't provided or it's the start.
-	// We should probably use the whole shape if the range is invalid.
-	useRange := maxDistTraveled > minDistTraveled
+	var minDistance = math.Inf(1)
+	var closestSegmentIndex int
+	var projectionRatio float64
 
-	for i := 0; i < len(shape); i++ {
-		if useRange && (cumulativeDistances[i] < minDistTraveled-10 || cumulativeDistances[i] > maxDistTraveled+10) {
-			continue
-		}
+	for i := 0; i < len(shape)-1; i++ {
+		distance, ratio := distanceToLineSegment(
+			lat, lon,
+			shape[i].Latitude, shape[i].Longitude,
+			shape[i+1].Latitude, shape[i+1].Longitude,
+		)
 
-		dist := utils.Distance(lat, lon, shape[i].Latitude, shape[i].Longitude)
-		if dist < minPointDist {
-			minPointDist = dist
-			bestDist = cumulativeDistances[i]
+		if distance < minDistance {
+			minDistance = distance
+			closestSegmentIndex = i
+			projectionRatio = ratio
 		}
 	}
 
-	return bestDist
+	var segmentLength float64
+	if closestSegmentIndex < len(shape)-1 {
+		segmentLength = utils.Distance(
+			shape[closestSegmentIndex].Latitude, shape[closestSegmentIndex].Longitude,
+			shape[closestSegmentIndex+1].Latitude, shape[closestSegmentIndex+1].Longitude,
+		)
+	}
+
+	return interpolateDistance(cumulativeDistances, segmentLength, closestSegmentIndex, projectionRatio)
+}
+
+func getDistanceAlongShapeInRange(lat, lon float64, shape []gtfs.ShapePoint, minDistTraveled, maxDistTraveled float64) float64 {
+	if len(shape) < 2 {
+		return 0
+	}
+
+	cumulativeDistances := preCalculateCumulativeDistances(shape)
+	useRange := maxDistTraveled > minDistTraveled
+
+	var minDistance = math.Inf(1)
+	var closestSegmentIndex int
+	var projectionRatio float64
+	var foundInRange = false
+
+	for i := 0; i < len(shape)-1; i++ {
+		// check if this segment is within or overlaps the range
+		if useRange {
+			segmentStart := cumulativeDistances[i]
+			segmentEnd := cumulativeDistances[i+1]
+
+			if segmentEnd < minDistTraveled-models.RangeSearchBufferMeters || segmentStart > maxDistTraveled+models.RangeSearchBufferMeters {
+				continue
+			}
+		}
+
+		distance, ratio := distanceToLineSegment(
+			lat, lon,
+			shape[i].Latitude, shape[i].Longitude,
+			shape[i+1].Latitude, shape[i+1].Longitude,
+		)
+
+		if distance < minDistance {
+			minDistance = distance
+			closestSegmentIndex = i
+			projectionRatio = ratio
+			foundInRange = true
+		}
+	}
+
+	// Fallback to full shape search if nothing found in range (GPS drift edge case)
+	if useRange && !foundInRange {
+		return getDistanceAlongShape(lat, lon, shape)
+	}
+
+	var segmentLength float64
+	if closestSegmentIndex < len(shape)-1 {
+		segmentLength = utils.Distance(
+			shape[closestSegmentIndex].Latitude, shape[closestSegmentIndex].Longitude,
+			shape[closestSegmentIndex+1].Latitude, shape[closestSegmentIndex+1].Longitude,
+		)
+	}
+
+	return interpolateDistance(cumulativeDistances, segmentLength, closestSegmentIndex, projectionRatio)
 }
 
 // IMPORTANT: Caller must hold manager.RLock() before calling this method.
@@ -611,20 +650,14 @@ func (api *RestAPI) calculatePreciseDistanceAlongTripWithCoords(
 		}
 	}
 
-	// Get cumulative distance to the start of the closest segment
-	// cumulativeDistances[i] represents the total distance from start to point i
-	cumulativeDistance := cumulativeDistances[closestSegmentIndex]
-
-	// Add the projection distance within the closest segment
+	var segmentLength float64
 	if closestSegmentIndex < len(shapePoints)-1 {
-		segmentDistance := utils.Distance(
+		segmentLength = utils.Distance(
 			shapePoints[closestSegmentIndex].Latitude, shapePoints[closestSegmentIndex].Longitude,
 			shapePoints[closestSegmentIndex+1].Latitude, shapePoints[closestSegmentIndex+1].Longitude,
 		)
-		cumulativeDistance += segmentDistance * projectionRatio
 	}
-
-	return cumulativeDistance
+	return interpolateDistance(cumulativeDistances, segmentLength, closestSegmentIndex, projectionRatio)
 }
 
 // calculatePreciseDistanceAlongTrip is the legacy version that fetches stop coordinates from the database
@@ -751,15 +784,14 @@ func (api *RestAPI) calculateBatchStopDistances(
 			}
 
 			// Calculate distance along trip
-			cumulativeDistance := cumulativeDistances[closestSegmentIndex]
+			var segmentLength float64
 			if closestSegmentIndex < len(shapePoints)-1 {
-				segmentDistance := utils.Distance(
+				segmentLength = utils.Distance(
 					shapePoints[closestSegmentIndex].Latitude, shapePoints[closestSegmentIndex].Longitude,
 					shapePoints[closestSegmentIndex+1].Latitude, shapePoints[closestSegmentIndex+1].Longitude,
 				)
-				cumulativeDistance += segmentDistance * projectionRatio
 			}
-			distanceAlongTrip = cumulativeDistance
+			distanceAlongTrip = interpolateDistance(cumulativeDistances, segmentLength, closestSegmentIndex, projectionRatio)
 		}
 
 		stopTimesList = append(stopTimesList, models.StopTime{
@@ -826,4 +858,12 @@ func (api *RestAPI) GetSituationIDsForTrip(ctx context.Context, tripID string) [
 		}
 	}
 	return situationIDs
+}
+
+func interpolateDistance(cumulativeDistances []float64, segmentLength float64, index int, projectionRatio float64) float64 {
+	cumulativeDistance := cumulativeDistances[index]
+	if index < len(cumulativeDistances)-1 {
+		cumulativeDistance += segmentLength * projectionRatio
+	}
+	return cumulativeDistance
 }

@@ -542,3 +542,19 @@ func (manager *Manager) MarkUnhealthy() {
 	defer manager.staticMutex.Unlock()
 	manager.isHealthy = false
 }
+
+// SetRealTimeTripsForTest manually sets realtime trips for testing purposes.
+// This allows injecting mock data into the private realTimeTrips slice.
+func (manager *Manager) SetRealTimeTripsForTest(trips []gtfs.Trip) {
+	manager.realTimeMutex.Lock()
+	defer manager.realTimeMutex.Unlock()
+
+	manager.realTimeTrips = trips
+	manager.realTimeTripLookup = make(map[string]int)
+
+	for i, trip := range trips {
+		if trip.ID.ID != "" {
+			manager.realTimeTripLookup[trip.ID.ID] = i
+		}
+	}
+}

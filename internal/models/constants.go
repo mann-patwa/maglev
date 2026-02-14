@@ -27,3 +27,5 @@ const (
 	DefaultMaxCountForStops  = 100
 	MaxAllowedCount          = 250
 )
+
+const RangeSearchBufferMeters = 50.0
