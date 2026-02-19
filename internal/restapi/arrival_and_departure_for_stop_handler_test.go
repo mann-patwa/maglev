@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/OneBusAway/go-gtfs"
-	go_gtfs "github.com/OneBusAway/go-gtfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"maglev.onebusaway.org/internal/models"
@@ -669,6 +668,7 @@ func TestArrivalsAndDeparturesForStopHandlerInvalidTime(t *testing.T) {
 
 func TestGetPredictedTimes_DelayPropagationLogic(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	tripID := "test_trip"
 	targetStopSequence := int64(5)
@@ -677,19 +677,19 @@ func TestGetPredictedTimes_DelayPropagationLogic(t *testing.T) {
 
 	uint32Ptr := func(v uint32) *uint32 { return &v }
 
-	mockTrip := go_gtfs.Trip{
-		ID: go_gtfs.TripID{ID: tripID},
-		StopTimeUpdates: []go_gtfs.StopTimeUpdate{
+	mockTrip := gtfs.Trip{
+		ID: gtfs.TripID{ID: tripID},
+		StopTimeUpdates: []gtfs.StopTimeUpdate{
 			{
 				StopSequence: uint32Ptr(1),
-				Departure: &go_gtfs.StopTimeEvent{
+				Departure: &gtfs.StopTimeEvent{
 					Delay: &delayDuration,
 				},
 			},
 		},
 	}
 
-	api.GtfsManager.SetRealTimeTripsForTest([]go_gtfs.Trip{mockTrip})
+	api.GtfsManager.SetRealTimeTripsForTest([]gtfs.Trip{mockTrip})
 
 	scheduledTime := time.Now()
 	predArrival, predDeparture := api.getPredictedTimes(tripID, "test_stop", targetStopSequence, scheduledTime, scheduledTime)

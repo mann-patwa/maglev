@@ -28,4 +28,5 @@ const (
 	MaxAllowedCount          = 250
 )
 
+// RangeSearchBufferMeters provides a 50m tolerance for GPS inaccuracy and curve approximation.
 const RangeSearchBufferMeters = 50.0
