@@ -39,6 +39,18 @@ func rateLimitAndValidateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Han
 	})
 }
 
+// withID applies "Simple ID" validation (just checks regex/length)
+func withID(api *RestAPI, handler http.HandlerFunc) http.Handler {
+	// Apply ID Middleware -> Then standard rate limits/auth
+	return rateLimitAndValidateAPIKey(api, handlerFunc(api.ValidateIDMiddleware(handler)))
+}
+
+// withCombinedID applies "Combined ID" validation (checks for agency_id format)
+func withCombinedID(api *RestAPI, handler http.HandlerFunc) http.Handler {
+	// Apply Combined ID Middleware -> Then standard rate limits/auth
+	return rateLimitAndValidateAPIKey(api, handlerFunc(api.ValidateCombinedIDMiddleware(handler)))
+}
+
 func registerPprofHandlers(mux *http.ServeMux) { // nolint:unused
 	// Register pprof handlers
 	// import "net/http/pprof"
@@ -54,34 +66,40 @@ func registerPprofHandlers(mux *http.ServeMux) { // nolint:unused
 func (api *RestAPI) SetRoutes(mux *http.ServeMux) {
 	// Health check endpoint - no authentication required
 	mux.HandleFunc("GET /healthz", api.healthHandler)
+
+	// Routes without ID validation (no withID wrapper needed)
 	mux.Handle("GET /api/where/agencies-with-coverage.json", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.agenciesWithCoverageHandler)))
-	mux.Handle("GET /api/where/agency/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.agencyHandler)))
-	mux.Handle("GET /api/where/routes-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.routesForAgencyHandler)))
-	mux.Handle("GET /api/where/stop-ids-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.stopIDsForAgencyHandler)))
-	mux.Handle("GET /api/where/stops-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.stopsForAgencyHandler)))
-	mux.Handle("GET /api/where/route-ids-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.routeIDsForAgencyHandler)))
-	mux.Handle("GET /api/where/route/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.routeHandler)))
-	mux.Handle("GET /api/where/stop/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.stopHandler)))
-	mux.Handle("GET /api/where/shape/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.shapesHandler)))
-	mux.Handle("GET /api/where/stops-for-route/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.stopsForRouteHandler)))
-	mux.Handle("GET /api/where/schedule-for-stop/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.scheduleForStopHandler)))
-	mux.Handle("GET /api/where/schedule-for-route/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.scheduleForRouteHandler)))
-	mux.Handle("GET /api/where/block/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.blockHandler)))
+	mux.Handle("GET /api/where/current-time.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.currentTimeHandler)))
+	mux.Handle("GET /api/where/stops-for-location.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.stopsForLocationHandler)))
+	mux.Handle("GET /api/where/routes-for-location.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.routesForLocationHandler)))
+	mux.Handle("GET /api/where/trips-for-location.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.tripsForLocationHandler)))
 	mux.Handle("GET /api/where/search/stop.json", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.searchStopsHandler)))
 	mux.Handle("GET /api/where/search/route.json", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.routeSearchHandler)))
-	mux.Handle("GET /api/where/current-time.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.currentTimeHandler)))
-	mux.Handle("GET /api/where/vehicles-for-agency/{id}", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.vehiclesForAgencyHandler)))
-	mux.Handle("GET /api/where/stops-for-location.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.stopsForLocationHandler)))
-	mux.Handle("GET /api/where/trip/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.tripHandler)))
-	mux.Handle("GET /api/where/routes-for-location.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.routesForLocationHandler)))
-	mux.Handle("GET /api/where/trip-details/{id}", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.tripDetailsHandler)))
-	mux.Handle("GET /api/where/trip-for-vehicle/{id}", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.tripForVehicleHandler)))
-	mux.Handle("GET /api/where/trips-for-location.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.tripsForLocationHandler)))
-	mux.Handle("GET /api/where/arrival-and-departure-for-stop/{id}", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.arrivalAndDepartureForStopHandler)))
-	mux.Handle("GET /api/where/trips-for-route/{id}", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.tripsForRouteHandler)))
-	mux.Handle("GET /api/where/arrivals-and-departures-for-stop/{id}", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.arrivalsAndDeparturesForStopHandler)))
-	mux.Handle("GET /api/where/report-problem-with-trip/{id}", CacheControlMiddleware(models.CacheDurationNone, rateLimitAndValidateAPIKey(api, api.reportProblemWithTripHandler)))
-	mux.Handle("GET /api/where/report-problem-with-stop/{id}", CacheControlMiddleware(models.CacheDurationNone, rateLimitAndValidateAPIKey(api, api.reportProblemWithStopHandler)))
+
+	// Routes with simple ID validation (agency IDs)
+	mux.Handle("GET /api/where/agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, api.agencyHandler)))
+	mux.Handle("GET /api/where/routes-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, api.routesForAgencyHandler)))
+	mux.Handle("GET /api/where/vehicles-for-agency/{id}", CacheControlMiddleware(models.CacheDurationShort, withID(api, api.vehiclesForAgencyHandler)))
+	mux.Handle("GET /api/where/stop-ids-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, api.stopIDsForAgencyHandler)))
+	mux.Handle("GET /api/where/stops-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, api.stopsForAgencyHandler)))
+	mux.Handle("GET /api/where/route-ids-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, api.routeIDsForAgencyHandler)))
+
+	// Routes with combined ID validation (agency_id_code format)
+	mux.Handle("GET /api/where/report-problem-with-trip/{id}", CacheControlMiddleware(models.CacheDurationNone, withCombinedID(api, api.reportProblemWithTripHandler)))
+	mux.Handle("GET /api/where/report-problem-with-stop/{id}", CacheControlMiddleware(models.CacheDurationNone, withCombinedID(api, api.reportProblemWithStopHandler)))
+	mux.Handle("GET /api/where/trip/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.tripHandler)))
+	mux.Handle("GET /api/where/route/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.routeHandler)))
+	mux.Handle("GET /api/where/stop/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.stopHandler)))
+	mux.Handle("GET /api/where/shape/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.shapesHandler)))
+	mux.Handle("GET /api/where/stops-for-route/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.stopsForRouteHandler)))
+	mux.Handle("GET /api/where/schedule-for-stop/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.scheduleForStopHandler)))
+	mux.Handle("GET /api/where/schedule-for-route/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.scheduleForRouteHandler)))
+	mux.Handle("GET /api/where/trip-details/{id}", CacheControlMiddleware(models.CacheDurationShort, withCombinedID(api, api.tripDetailsHandler)))
+	mux.Handle("GET /api/where/block/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.blockHandler)))
+	mux.Handle("GET /api/where/trip-for-vehicle/{id}", CacheControlMiddleware(models.CacheDurationShort, withCombinedID(api, api.tripForVehicleHandler)))
+	mux.Handle("GET /api/where/arrival-and-departure-for-stop/{id}", CacheControlMiddleware(models.CacheDurationShort, withCombinedID(api, api.arrivalAndDepartureForStopHandler)))
+	mux.Handle("GET /api/where/trips-for-route/{id}", CacheControlMiddleware(models.CacheDurationShort, withCombinedID(api, api.tripsForRouteHandler)))
+	mux.Handle("GET /api/where/arrivals-and-departures-for-stop/{id}", CacheControlMiddleware(models.CacheDurationShort, withCombinedID(api, api.arrivalsAndDeparturesForStopHandler)))
 }
 
 // SetupAPIRoutes creates and configures the API router with all middleware applied globally

@@ -9,30 +9,17 @@ import (
 )
 
 func (api *RestAPI) shapesHandler(w http.ResponseWriter, r *http.Request) {
-	id := utils.ExtractIDFromParams(r)
-	if err := utils.ValidateID(id); err != nil {
-		fieldErrors := map[string][]string{
-			"id": {err.Error()},
-		}
-		api.validationErrorResponse(w, r, fieldErrors)
-		return
-	}
-
-	agencyID, shapeID, err := utils.ExtractAgencyIDAndCodeID(id)
-	if err != nil {
-		fieldErrors := map[string][]string{
-			"id": {err.Error()},
-		}
-		api.validationErrorResponse(w, r, fieldErrors)
-		return
-	}
+	parsed, _ := utils.GetParsedIDFromContext(r.Context())
+	agencyID := parsed.AgencyID
+	shapeID := parsed.CodeID
 
 	ctx := r.Context()
 
 	api.GtfsManager.RLock()
 	defer api.GtfsManager.RUnlock()
 
-	_, err = api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, agencyID)
+	_, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, agencyID)
+
 	if err != nil {
 		api.sendNotFound(w, r)
 		return
